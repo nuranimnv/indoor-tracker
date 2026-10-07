@@ -179,24 +179,52 @@ function setSensorChip(cls, text) {
   $('sensor').textContent = text;
 }
 
-// Addım aşkarlanması: |a| − g (cazibə yavaş orta qiymətlə çıxılır), hamarlanır.
-// Siqnal həddi keçəndə bir addım sayılır. Növbəti addım üçün siqnal əvvəlcə sıfırdan aşağı düşməlidir
-// (bir addımdakı iki zirvə — daban və itələmə — iki addım sayılmasın), iki addım arası ən azı 350 ms.
-let gAvg = 9.81, smooth = 0, armed = true, lastStepAt = 0;
+// Addım aşkarlanması:
+//  1) Cazibə vektoru (yavaş orta qiymət) tapılır, təcilin yalnız ŞAQULİ hissəsi götürülür —
+//     yeriyəndə bədən yuxarı-aşağı silkələnir, telefonu əldə çevirmək isə əsasən başqa istiqamətdə təcil verir.
+//  2) Telefon sürətlə fırlanırsa (giroskop > 150°/s), həmin an addım sayılmır.
+//  3) Zirvə həddi keçəndə "namizəd addım" yaranır; bir addımdakı iki zirvə (daban + itələmə) ayrılmasın deyə
+//     siqnal sıfırdan aşağı düşməyincə yeni namizəd yoxdur, aralarında ən azı 350 ms.
+//  4) Yeriş ritmlidir: ardıcıl 3 namizəd 0.3–1.3 s fasilə ilə gəlməyincə addım sayılmır.
+//     Yeriş təsdiqlənəndən sonra hər namizəd dərhal addımdır (1.5 s fasilə olsa, yeriş dayanmış sayılır).
+let grav = null, vSmooth = 0, armed = true, lastCandAt = -1e9, rotatingUntil = 0;
+let pendingCands = 0, walking = false;
 function onMotion(e) {
   const a = e.accelerationIncludingGravity;
   if (!a || a.x == null) return;
   gotMotion = true;
-  const m = Math.hypot(a.x, a.y, a.z);
-  gAvg = gAvg * 0.98 + m * 0.02;
-  smooth = smooth * 0.75 + (m - gAvg) * 0.25;
   const now = performance.now();
-  if (armed && smooth > settings.threshold && now - lastStepAt > 350) {
+
+  if (!grav) grav = { x: a.x, y: a.y, z: a.z };
+  grav.x = grav.x * 0.97 + a.x * 0.03;
+  grav.y = grav.y * 0.97 + a.y * 0.03;
+  grav.z = grav.z * 0.97 + a.z * 0.03;
+  const gLen = Math.hypot(grav.x, grav.y, grav.z) || 1;
+  const vert = ((a.x - grav.x) * grav.x + (a.y - grav.y) * grav.y + (a.z - grav.z) * grav.z) / gLen;
+  vSmooth = vSmooth * 0.75 + vert * 0.25;
+
+  const r = e.rotationRate;
+  if (r && Math.hypot(r.alpha || 0, r.beta || 0, r.gamma || 0) > 150) rotatingUntil = now + 400;
+
+  if (armed && vSmooth > settings.threshold && now - lastCandAt > 350) {
     armed = false;
-    lastStepAt = now;
-    onStep();
-  } else if (!armed && smooth < 0) {
+    onCandidate(now);
+  } else if (!armed && vSmooth < 0) {
     armed = true;
+  }
+}
+
+function onCandidate(now) {
+  const gap = (now - lastCandAt) / 1000;
+  lastCandAt = now;
+  if (now < rotatingUntil) { pendingCands = 0; walking = false; return; }
+  if (walking && gap <= 1.5) { onStep(); return; }
+  walking = false;
+  pendingCands = gap >= 0.3 && gap <= 1.3 ? pendingCands + 1 : 1;
+  if (pendingCands >= 3) {
+    walking = true;
+    for (let i = 0; i < pendingCands; i++) onStep();
+    pendingCands = 0;
   }
 }
 
