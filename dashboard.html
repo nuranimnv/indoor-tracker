@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="az">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live Dashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="back" href="index.html" aria-label="Geri">←</a>
+    <h1>Canlı panel · <span id="title">—</span></h1>
+    <span class="spacer"></span>
+    <span id="signal" class="chip">Gözlənilir</span>
+  </header>
+
+  <main class="dash">
+    <section class="card mapcard"><canvas id="map" class="map"></canvas></section>
+
+    <aside class="side">
+      <div class="stats">
+        <div class="stat"><div class="k">Sessiya ID</div><div class="v" id="s-id">—</div></div>
+        <div class="stat"><div class="k">Status</div><div class="v" id="s-status">—</div></div>
+        <div class="stat"><div class="k">Cari X</div><div class="v" id="s-x">—</div></div>
+        <div class="stat"><div class="k">Cari Y</div><div class="v" id="s-y">—</div></div>
+        <div class="stat"><div class="k">Məsafə</div><div class="v" id="s-dist">0.00 m</div></div>
+        <div class="stat"><div class="k">Addımlar</div><div class="v" id="s-steps">0</div></div>
+        <div class="stat"><div class="k">Otaq</div><div class="v" id="s-room">—</div></div>
+        <div class="stat"><div class="k">İstiqamət</div><div class="v" id="s-heading">—</div></div>
+        <div class="stat"><div class="k">Başlanğıc nöqtəsi</div><div class="v" id="s-start">—</div></div>
+        <div class="stat"><div class="k">Nöqtələr</div><div class="v" id="s-points">0</div></div>
+      </div>
+
+      <div class="card">
+        <h2>Telefonu qoşun</h2>
+        <div class="qr">
+          <div id="qrcode"></div>
+          <div class="stack" style="gap:8px; min-width:0">
+            <span class="small muted">Telefonun kamerası ilə skan edin və ya linki açın:</span>
+            <a id="phone-link" class="link" target="_blank" rel="noopener"></a>
+            <span id="https-warn" class="small" style="color:var(--warn)" hidden>Telefon sensorları yalnız HTTPS saytda işləyir — README-yə baxın.</span>
+          </div>
+        </div>
+      </div>
+
+      <form id="room-form" class="card stack">
+        <h2>Otağın ölçüləri</h2>
+        <div class="row">
+          <div class="field"><label for="w">En (m)</label><input id="w" type="number" min="0.5" max="500" step="0.1" required></div>
+          <div class="field"><label for="h">Uzunluq (m)</label><input id="h" type="number" min="0.5" max="500" step="0.1" required></div>
+        </div>
+        <div class="actions">
+          <button class="btn primary" type="submit">Yadda saxla</button>
+          <button class="btn" type="button" id="clear">İzi təmizlə</button>
+        </div>
+      </form>
+    </aside>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/sync.js"></script>
+  <script src="js/room.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>

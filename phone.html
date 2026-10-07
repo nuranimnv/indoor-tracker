@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="az">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#17695e">
+  <title>Phone Tracker</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main class="phone">
+    <div style="display:flex; align-items:center; gap:10px">
+      <h1 id="sid" style="flex:1">—</h1>
+      <span id="conn" class="chip">…</span>
+    </div>
+
+    <form id="setup" class="card stack" hidden>
+      <span class="small muted">Bu sessiya hələ yaradılmayıb. Otağın ölçülərini daxil edin:</span>
+      <div class="row">
+        <div class="field"><label for="w">En (m)</label><input id="w" type="number" min="0.5" step="0.1" value="4" required></div>
+        <div class="field"><label for="h">Uzunluq (m)</label><input id="h" type="number" min="0.5" step="0.1" value="6" required></div>
+      </div>
+      <button class="btn primary" type="submit">Yarat</button>
+    </form>
+
+    <section class="card mapcard"><canvas id="map" class="map"></canvas></section>
+
+    <div class="stats">
+      <div class="stat"><div class="k">X</div><div class="v" id="s-x">—</div></div>
+      <div class="stat"><div class="k">Y</div><div class="v" id="s-y">—</div></div>
+      <div class="stat"><div class="k">Məsafə</div><div class="v" id="s-dist">0.00 m</div></div>
+      <div class="stat" id="steps-box"><div class="k">Addım</div><div class="v" id="s-steps">0</div></div>
+    </div>
+
+    <div style="display:flex; gap:8px; flex-wrap:wrap">
+      <span id="sensor" class="chip">Sensorlar söndürülüb</span>
+      <span id="status" class="chip">Hazır</span>
+    </div>
+
+    <div id="hint" class="hint">1) Xəritədə dayandığınız yerə toxunun. 2) Üzünüzü xəritənin <b>yuxarı</b> divarına çevirin, telefonu qarşınızda düz tutun. 3) «Başla» düyməsini basın və yeriyin.</div>
+
+    <div class="controls">
+      <button id="start" class="btn primary">▶ Başla</button>
+      <button id="reset" class="btn">↺ Yeni qaçış</button>
+      <button id="calib" class="btn" style="grid-column: span 2">Kalibrlə (indi yuxarıya baxıram)</button>
+    </div>
+
+    <details class="card">
+      <summary>Ayarlar</summary>
+      <div class="stack">
+        <div class="field">
+          <label for="len">Addım uzunluğu: <b id="len-v"></b> m</label>
+          <input id="len" type="range" min="0.4" max="1" step="0.01">
+        </div>
+        <div class="field">
+          <label for="thr">Addım həssaslığı (hədd): <b id="thr-v"></b> m/s² — kiçik dəyər = daha həssas</label>
+          <input id="thr" type="range" min="0.5" max="3" step="0.1">
+        </div>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary>Əl ilə idarə (sensorsuz test)</summary>
+      <div class="dpad">
+        <span></span><button class="btn" data-move="0,-1" aria-label="Yuxarı">↑</button><span></span>
+        <button class="btn" data-move="-1,0" aria-label="Sola">←</button>
+        <button class="btn" id="fake-step" aria-label="Baxdığı istiqamətdə bir addım" title="Bir addım">👣</button>
+        <button class="btn" data-move="1,0" aria-label="Sağa">→</button>
+        <span></span><button class="btn" data-move="0,1" aria-label="Aşağı">↓</button><span></span>
+      </div>
+    </details>
+  </main>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/sync.js"></script>
+  <script src="js/room.js"></script>
+  <script src="js/phone.js"></script>
+</body>
+</html>

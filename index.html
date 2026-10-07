@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="az">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Indoor Tracker</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main class="landing">
+    <div>
+      <h1>Indoor Tracker</h1>
+      <p class="muted">Otağın ölçülərini daxil edin. Telefonu götürən adam hərəkət etdikcə onun mövqeyi bu düzbucaqlının içində canlı göstəriləcək.</p>
+    </div>
+
+    <form id="form" class="card stack">
+      <div class="field">
+        <label for="sid">Sessiya ID</label>
+        <input id="sid" type="text" value="session_001" autocomplete="off">
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="w">En (m)</label>
+          <input id="w" type="number" min="0.5" max="500" step="0.1" value="4" required>
+        </div>
+        <div class="field">
+          <label for="h">Uzunluq (m)</label>
+          <input id="h" type="number" min="0.5" max="500" step="0.1" value="6" required>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" type="submit" data-go="dashboard">Paneli aç (müəllim)</button>
+        <button class="btn" type="submit" data-go="phone">Telefon səhifəsi</button>
+      </div>
+    </form>
+
+    <div><span id="mode" class="chip">…</span></div>
+  </main>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/sync.js"></script>
+  <script>
+    const mode = document.getElementById('mode');
+    if (Sync.mode === 'firebase') { mode.textContent = 'Firebase qoşulub'; mode.className = 'chip ok'; }
+    else { mode.textContent = 'Lokal test rejimi (js/config.js boşdur)'; mode.className = 'chip warn'; }
+
+    let go = 'dashboard';
+    document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => { go = b.dataset.go; }));
+
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = Sync.cleanId(document.getElementById('sid').value);
+      const width = +document.getElementById('w').value;
+      const height = +document.getElementById('h').value;
+      if (!(width > 0 && height > 0)) return;
+      const meta = await Sync.once(id, 'meta');
+      if (meta) {
+        await Sync.update(id, 'meta', { width, height });
+      } else {
+        await Sync.set(id, 'meta', { width, height, status: 'WAITING', start: { x: width / 2, y: height / 2 } });
+      }
+      location.href = `${go}.html?s=${encodeURIComponent(id)}`;
+    });
+  </script>
+</body>
+</html>
