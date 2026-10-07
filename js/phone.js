@@ -124,6 +124,10 @@ function moveBy(dx, dy) {
 }
 
 function onStep() {
+  if (measure.active) {
+    measure.steps++;
+    $('measure').textContent = `■ Bitdi (${measure.steps} addım)`;
+  }
   if (!state.tracking) return;
   state.steps++;
   const th = (roomHeading() ?? 0) * Math.PI / 180;
@@ -175,37 +179,47 @@ function setSensorChip(cls, text) {
   $('sensor').textContent = text;
 }
 
-// Addım aşkarlanması: |a| − g (cazibə yavaş orta qiymətlə çıxılır), hamarlanır,
-// hədd aşıldıqda bir addım sayılır (iki addım arası ən azı 280 ms).
-let gAvg = 9.81, smooth = 0, above = false, lastStepAt = 0;
+// Addım aşkarlanması: |a| − g (cazibə yavaş orta qiymətlə çıxılır), hamarlanır.
+// Siqnal həddi keçəndə bir addım sayılır. Növbəti addım üçün siqnal əvvəlcə sıfırdan aşağı düşməlidir
+// (bir addımdakı iki zirvə — daban və itələmə — iki addım sayılmasın), iki addım arası ən azı 350 ms.
+let gAvg = 9.81, smooth = 0, armed = true, lastStepAt = 0;
 function onMotion(e) {
   const a = e.accelerationIncludingGravity;
   if (!a || a.x == null) return;
   gotMotion = true;
   const m = Math.hypot(a.x, a.y, a.z);
   gAvg = gAvg * 0.98 + m * 0.02;
-  smooth = smooth * 0.7 + (m - gAvg) * 0.3;
+  smooth = smooth * 0.75 + (m - gAvg) * 0.25;
   const now = performance.now();
-  if (!above && smooth > settings.threshold && now - lastStepAt > 280) {
-    above = true;
+  if (armed && smooth > settings.threshold && now - lastStepAt > 350) {
+    armed = false;
     lastStepAt = now;
     onStep();
-  } else if (above && smooth < settings.threshold * 0.3) {
-    above = false;
+  } else if (!armed && smooth < 0) {
+    armed = true;
   }
 }
 
 // Telefonun "irəli" istiqaməti (dərəcə, saat əqrəbi üzrə).
-// Telefonun yuxarı ucu (y oxu) və arxa tərəfi (−z oxu) üfüqi müstəviyə proyeksiya edilib toplanır,
-// beləliklə telefon həm düz, həm də maili/dik tutulanda istiqamət düzgün qalır.
+// Ekranın yuxarı tərəfi və telefonun arxası (−z oxu) üfüqi müstəviyə proyeksiya edilib toplanır,
+// beləliklə telefon düz, maili, dik və ya üfüqi (landscape) tutulanda istiqamət düzgün qalır.
 function forwardHeading(alpha, beta, gamma) {
   const d = Math.PI / 180;
   const cX = Math.cos(beta * d), sX = Math.sin(beta * d);
   const cY = Math.cos(gamma * d), sY = Math.sin(gamma * d);
   const cZ = Math.cos(alpha * d), sZ = Math.sin(alpha * d);
-  const east = -cX * sZ - (cY * sZ * sX + cZ * sY);
-  const north = cZ * cX - (sZ * sY - cZ * cY * sX);
+  // Cihaz oxlarının yer koordinatlarında (şərq, şimal) üfüqi komponentləri
+  const xE = cZ * cY - sZ * sX * sY, xN = cY * sZ + cZ * sX * sY; // sağ tərəf
+  const yE = -cX * sZ, yN = cZ * cX;                              // yuxarı uc
+  const bE = -(cY * sZ * sX + cZ * sY), bN = -(sZ * sY - cZ * cY * sX); // arxa tərəf
+  const sa = screenAngle() * d;
+  const east = Math.cos(sa) * yE + Math.sin(sa) * xE + bE;
+  const north = Math.cos(sa) * yN + Math.sin(sa) * xN + bN;
   return (Math.atan2(east, north) / d + 360) % 360;
+}
+function screenAngle() {
+  if (screen.orientation && typeof screen.orientation.angle === 'number') return screen.orientation.angle;
+  return typeof window.orientation === 'number' ? window.orientation : 0;
 }
 
 function onOrientation(e) {
@@ -224,6 +238,11 @@ function updateHeading(deg) {
   if (!hInit) { hx = Math.sin(r); hy = Math.cos(r); hInit = true; }
   else { hx = hx * 0.8 + Math.sin(r) * 0.2; hy = hy * 0.8 + Math.cos(r) * 0.2; }
   state.rawHeading = (Math.atan2(hx, hy) * 180 / Math.PI + 360) % 360;
+  // Kalibrləmə sensor hələ oxunmamışdan istənibsə, ilk sabit oxunuşda edirik
+  if (pendingCalib && ++headingSamples > 10) {
+    pendingCalib = false;
+    state.heading0 = state.rawHeading;
+  }
   render();
   const h = roomHeading();
   if (state.tracking && (lastSentHeading == null || Math.abs(((h - lastSentHeading + 540) % 360) - 180) > 4)) {
@@ -231,11 +250,36 @@ function updateHeading(deg) {
   }
 }
 
+let pendingCalib = false, headingSamples = 0;
 function calibrate() {
   if (state.rawHeading != null) state.heading0 = state.rawHeading;
+  else { pendingCalib = true; headingSamples = 0; }
   publishLive(true);
   render();
 }
+
+// ---------- Addım uzunluğunun ölçülməsi ----------
+// Məlum məsafəni (məs. otağın bir divarından o birinə) yeriyib addımları sayırıq: L = məsafə / addım sayı
+const measure = { active: false, steps: 0 };
+$('measure').addEventListener('click', async () => {
+  if (!measure.active) {
+    await enableSensors();
+    measure.active = true;
+    measure.steps = 0;
+    $('measure').textContent = '■ Bitdi (0 addım)';
+    return;
+  }
+  measure.active = false;
+  $('measure').textContent = 'Addım uzunluğunu ölç';
+  if (measure.steps < 3) { alert('Çox az addım sayıldı. Ən azı 5–6 addım yeriyin.'); return; }
+  const answer = prompt(`${measure.steps} addım sayıldı. Neçə metr yeridiniz?`, String(state.h));
+  const dist = parseFloat(String(answer || '').replace(',', '.'));
+  if (!(dist > 0)) return;
+  settings.stepLength = clamp(Math.round(dist / measure.steps * 100) / 100, 0.3, 1.2);
+  $('len').value = settings.stepLength;
+  $('len-v').textContent = settings.stepLength.toFixed(2);
+  saveSettings();
+});
 
 // ---------- Ekran oyaq qalsın ----------
 let wakeLock = null;
@@ -301,6 +345,8 @@ $('calib').addEventListener('click', calibrate);
 // Xəritəyə toxunmaq: izləmə başlamamışdan əvvəl — başlanğıc nöqtəsi; izləmə zamanı — mövqeyin düzəldilməsi
 $('map').addEventListener('click', (e) => {
   if (!state.metaLoaded) return;
+  // Sensorları ilk toxunuşda qoşuruq ki, «Başla»dan əvvəl istiqamət oxu görünsün və sabitləşsin
+  if (!sensorsBound) enableSensors();
   const rect = e.currentTarget.getBoundingClientRect();
   const p = view.toRoom(e.clientX - rect.left, e.clientY - rect.top);
   if (state.tracking) {
