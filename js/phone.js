@@ -69,6 +69,8 @@ Sync.on(ID, 'meta', (m) => {
   state.h = +m.height;
   state.wSteps = +m.widthSteps || 0;
   state.hSteps = +m.heightSteps || 0;
+  view.wSteps = state.wSteps;
+  view.hSteps = state.hSteps;
   view.setRoom(state.w, state.h);
   // Otaq addımla verilibsə, metr ölçüsünü bu telefonun addım uzunluğu ilə hesablayırıq
   if (state.wSteps && state.hSteps &&

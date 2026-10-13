@@ -26,6 +26,8 @@ if (location.protocol !== 'https:') $('https-warn').hidden = false;
 
 Sync.on(ID, 'meta', (m) => {
   if (!m) { $('s-status').textContent = 'Sessiya yoxdur'; return; }
+  view.wSteps = +m.widthSteps || 0;
+  view.hSteps = +m.heightSteps || 0;
   view.setRoom(+m.width, +m.height);
   $('s-room').textContent = m.widthSteps
     ? `${m.widthSteps} × ${m.heightSteps} addım`

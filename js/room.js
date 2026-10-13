@@ -89,11 +89,13 @@ class RoomView {
     ctx.font = `${this.compact ? 11 : 13}px system-ui, -apple-system, "Segoe UI", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    ctx.fillText(`${fmtM(this.w)} m`, ox + W / 2, oy - 8);
+    // Otaq addımla verilibsə, kənarlarda addım sayı yazılır
+    const steps = this.wSteps && this.hSteps;
+    ctx.fillText(steps ? `${this.wSteps} addım` : `${fmtM(this.w)} m`, ox + W / 2, oy - 8);
     ctx.save();
     ctx.translate(ox - 8, oy + H / 2);
     ctx.rotate(-Math.PI / 2);
-    ctx.fillText(`${fmtM(this.h)} m`, 0, 0);
+    ctx.fillText(steps ? `${this.hSteps} addım` : `${fmtM(this.h)} m`, 0, 0);
     ctx.restore();
 
     // İz
