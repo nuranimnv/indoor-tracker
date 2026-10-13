@@ -115,6 +115,11 @@ class RoomView {
       ctx.beginPath();
       ctx.arc(x, y, this.compact ? 5 : 7, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.fillStyle = col('--muted');
+      ctx.font = `600 ${this.compact ? 11 : 13}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText('A', x + (this.compact ? 6 : 9), y - (this.compact ? 4 : 6));
     }
 
     // Cari mövqe (insan + telefon)

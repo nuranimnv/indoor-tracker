@@ -29,6 +29,10 @@
       return () => r.off('value', h);
     },
     pushPoint: (id, run, pt) => fb.ref(id, `path/${run}`).push(pt),
+    // Bütün yolu bir dəfəyə yazır (açarlar sıralı olsun deyə p00000, p00001, ...)
+    setPoints: (id, run, pts) => fb.ref(id, `path/${run}`).set(
+      Object.fromEntries(pts.map((p, i) => [`p${String(i).padStart(5, '0')}`, p]))
+    ),
     onPoints(id, run, cb) {
       const r = fb.ref(id, `path/${run}`);
       const h = (s) => cb(s.val());
@@ -86,6 +90,11 @@
       arr.push(pt);
       put(key, arr);
       emit({ type: 'point', id, run, pt });
+      return Promise.resolve();
+    },
+    setPoints(id, run, pts) {
+      put(k(id, `path:${run}`), pts);
+      pts.forEach((pt) => emit({ type: 'point', id, run, pt }));
       return Promise.resolve();
     },
     onPoints(id, run, cb) {

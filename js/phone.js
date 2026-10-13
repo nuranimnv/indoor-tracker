@@ -94,6 +94,7 @@ Sync.on(ID, 'meta', (m) => {
     // Panel "İzi təmizlə" basdı — yeni yolu cari nöqtədən davam etdiririk
     state.run = m.run;
     view.trail = [];
+    loopStart = 0;
     addPoint();
   }
   const rot = +m.rotation || 0;
@@ -363,9 +364,48 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ---------- Düymələr ----------
+// ---------- A nöqtəsinə qayıdış: xətanın düzəldilməsi (loop closure) ----------
+// İstifadəçi başlanğıca (A) qayıtdığını bildirir. Hesablanmış mövqe ilə A arasındakı fərq (toplanmış xəta)
+// sonuncu dövrənin nöqtələrinə keçilmiş məsafəyə mütənasib paylanır:
+//   p_i' = p_i + e · (s_i / S)     e = A − son mövqe, s_i = i-ci nöqtəyə qədər yol, S = dövrənin ümumi uzunluğu
+// Belə ki, yolun əvvəli az, sonu çox düzəlir və iz A-da qapanır.
+let loopStart = 0; // cari dövrənin view.trail-dakı başlanğıc indeksi
+function closeLoop() {
+  if (!state.started || state.run == null || view.trail.length < 2) { flashHint(); return; }
+  const ex = state.start.x - state.x, ey = state.start.y - state.y;
+  const err = Math.hypot(ex, ey);
+  const seg = view.trail.slice(loopStart);
+  const cum = [0];
+  for (let i = 1; i < seg.length; i++) {
+    cum.push(cum[i - 1] + Math.hypot(seg[i].x - seg[i - 1].x, seg[i].y - seg[i - 1].y));
+  }
+  const total = cum[cum.length - 1];
+  const fixed = seg.map((p, i) => {
+    const f = total > 0 ? cum[i] / total : 1;
+    return { x: round2(clamp(p.x + ex * f, 0, state.w)), y: round2(clamp(p.y + ey * f, 0, state.h)) };
+  });
+  fixed[fixed.length - 1] = { x: round2(state.start.x), y: round2(state.start.y) };
+  const trail = view.trail.slice(0, loopStart).concat(fixed);
+
+  state.x = state.start.x;
+  state.y = state.start.y;
+  state.run = Date.now();
+  view.trail = trail;
+  loopStart = trail.length - 1;
+  // Panel yeni "run"-a keçib düzəldilmiş yolu bütövlükdə yenidən çəkir
+  Sync.clearPath(ID);
+  Sync.setPoints(ID, state.run, trail);
+  Sync.update(ID, 'meta', { run: state.run });
+  publishLive(true);
+  render();
+  $('hint').textContent = `A nöqtəsinə qayıtdınız: ${err.toFixed(2)} m toplanmış xəta yol boyunca paylanıb düzəldildi.`;
+}
+$('closeloop').addEventListener('click', closeLoop);
+
 function newRun() {
   state.run = Date.now();
   view.trail = [];
+  loopStart = 0;
   state.x = state.start.x;
   state.y = state.start.y;
   state.distance = 0;
