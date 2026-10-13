@@ -28,6 +28,9 @@ Sync.on(ID, 'meta', (m) => {
   $('s-room').textContent = `${fmtM(m.width)} × ${fmtM(m.height)} m`;
   if (document.activeElement !== $('w')) $('w').value = m.width;
   if (document.activeElement !== $('h')) $('h').value = m.height;
+  const rot = +m.rotation || 0;
+  if (document.activeElement !== $('rot')) $('rot').value = rot;
+  $('rot-v').textContent = `${rot > 0 ? '+' : ''}${rot}°`;
 
   view.start = m.start || null;
   $('s-start').textContent = m.start ? `${m.start.x.toFixed(2)}, ${m.start.y.toFixed(2)}` : '—';
@@ -90,6 +93,15 @@ $('room-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const width = +$('w').value, height = +$('h').value;
   if (width > 0 && height > 0) Sync.update(ID, 'meta', { width, height });
+});
+
+// Bucaq dərhal tətbiq olunur (telefon onu hərəkət istiqamətinə əlavə edir)
+let rotTimer = 0;
+$('rot').addEventListener('input', () => {
+  const rotation = +$('rot').value;
+  $('rot-v').textContent = `${rotation > 0 ? '+' : ''}${rotation}°`;
+  clearTimeout(rotTimer);
+  rotTimer = setTimeout(() => Sync.update(ID, 'meta', { rotation }), 200);
 });
 
 $('clear').addEventListener('click', async () => {

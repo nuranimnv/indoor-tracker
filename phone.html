@@ -45,6 +45,19 @@
       <button id="calib" class="btn" style="grid-column: span 2">Kalibrlə (indi yuxarıya baxıram)</button>
     </div>
 
+    <div class="card stack" style="gap:8px">
+      <label for="rot" class="small muted">Otağın bucağı (sağa +, sola −): <b id="rot-v">0°</b></label>
+      <input id="rot" type="range" min="-90" max="90" step="1" value="0">
+      <div class="rotbtns">
+        <button class="btn" type="button" data-rot="-5">−5°</button>
+        <button class="btn" type="button" data-rot="-1">−1°</button>
+        <button class="btn" type="button" data-rot="0">0°</button>
+        <button class="btn" type="button" data-rot="1">+1°</button>
+        <button class="btn" type="button" data-rot="5">+5°</button>
+      </div>
+      <span class="small muted">Divar boyu düz yeriyəndə nöqtə əyri gedirsə, bucağı dəyişin. Divara paralel dayanın və istiqamət konusu xəritədə divara paralel olana qədər bucağı tənzimləyin.</span>
+    </div>
+
     <details class="card">
       <summary>Ayarlar</summary>
       <div class="stack">
