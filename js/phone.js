@@ -66,6 +66,7 @@ Sync.on(ID, 'meta', (m) => {
   } else if (m.run != null && m.run !== state.run) {
     // Panel "İzi təmizlə" basdı — yeni yolu cari nöqtədən davam etdiririk
     state.run = m.run;
+    view.trail = [];
     addPoint();
   }
   // Ölçülər dəyişibsə, mövqe otaqdan kənarda qalmasın
@@ -107,7 +108,10 @@ function publishLive(force) {
 setInterval(() => { if (state.tracking) publishLive(true); }, 2000);
 
 function addPoint() {
-  if (state.run != null) Sync.pushPoint(ID, state.run, { x: round2(state.x), y: round2(state.y) });
+  if (state.run == null) return;
+  const p = { x: round2(state.x), y: round2(state.y) };
+  view.trail.push(p); // telefonun öz xəritəsində də iz görünsün
+  Sync.pushPoint(ID, state.run, p);
 }
 
 // ---------- Hərəkət ----------
@@ -329,6 +333,7 @@ document.addEventListener('visibilitychange', () => {
 // ---------- Düymələr ----------
 function newRun() {
   state.run = Date.now();
+  view.trail = [];
   state.x = state.start.x;
   state.y = state.start.y;
   state.distance = 0;
