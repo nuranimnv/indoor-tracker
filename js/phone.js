@@ -23,7 +23,6 @@ const state = {
   started: false,
   run: null,
   metaLoaded: false,
-  rotation: 0,      // otağın fırlanma bucağı (dərəcə)
   rawHeading: null, // telefonun öz istiqaməti (dərəcə)
   heading0: null    // kalibrləmə: "otağın yuxarısı" hansı istiqamətdir
 };
@@ -44,32 +43,6 @@ function bindRange(id, key, digits) {
 }
 bindRange('len', 'stepLength', 2);
 bindRange('thr', 'threshold', 1);
-
-// ---------- Otağın fırlanma bucağı ----------
-// Bina düz bucaqlı deyilsə, hərəkət istiqaməti otağa nisbətən bu bucaq qədər düzəldilir.
-// Müsbət = otaq sağa (saat əqrəbi istiqamətində) fırlanıb. Dəyər panel ilə ortaqdır (meta.rotation).
-let rotEditedAt = -1e9, rotTimer = 0;
-function showRotation() {
-  $('rot').value = state.rotation;
-  $('rot-v').textContent = `${state.rotation > 0 ? '+' : ''}${state.rotation}°`;
-}
-function setRotation(v) {
-  state.rotation = clamp(Math.round(v), -90, 90);
-  rotEditedAt = performance.now();
-  showRotation();
-  render();
-  clearTimeout(rotTimer);
-  rotTimer = setTimeout(() => {
-    Sync.update(ID, 'meta', { rotation: state.rotation });
-    publishLive(true);
-  }, 200);
-}
-$('rot').addEventListener('input', () => setRotation(+$('rot').value));
-document.querySelectorAll('[data-rot]').forEach((b) => b.addEventListener('click', () => {
-  const d = b.dataset.rot;
-  setRotation(d === '0' ? 0 : state.rotation + Number(d));
-}));
-showRotation();
 
 // ---------- Sinxronizasiya ----------
 Sync.onConnection((ok) => {
@@ -96,11 +69,6 @@ Sync.on(ID, 'meta', (m) => {
     view.trail = [];
     loopStart = 0;
     addPoint();
-  }
-  const rot = +m.rotation || 0;
-  if (rot !== state.rotation && performance.now() - rotEditedAt > 1000) {
-    state.rotation = rot;
-    showRotation();
   }
   // Ölçülər dəyişibsə, mövqe otaqdan kənarda qalmasın
   state.x = clamp(state.x, 0, state.w);
@@ -177,7 +145,7 @@ function onStep() {
 
 function roomHeading() {
   if (state.rawHeading == null) return null;
-  return (state.rawHeading - (state.heading0 ?? state.rawHeading) - state.rotation + 720) % 360;
+  return (state.rawHeading - (state.heading0 ?? state.rawHeading) + 360) % 360;
 }
 
 // ---------- Sensorlar ----------

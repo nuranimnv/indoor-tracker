@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Live Dashboard</title>
-  <link rel="stylesheet" href="css/style.css?v=8">
+  <link rel="stylesheet" href="css/style.css?v=9">
 </head>
 <body>
   <header class="topbar">
@@ -49,10 +49,6 @@
           <div class="field"><label for="w">En (m)</label><input id="w" type="number" min="0.5" max="500" step="0.1" required></div>
           <div class="field"><label for="h">Uzunluq (m)</label><input id="h" type="number" min="0.5" max="500" step="0.1" required></div>
         </div>
-        <div class="field">
-          <label for="rot">Otağın bucağı (sağa +, sola −): <b id="rot-v">0°</b></label>
-          <input id="rot" type="range" min="-90" max="90" step="1" value="0">
-        </div>
         <div class="actions">
           <button class="btn primary" type="submit">Yadda saxla</button>
           <button class="btn" type="button" id="clear">İzi təmizlə</button>
@@ -64,9 +60,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-  <script src="js/config.js?v=8"></script>
-  <script src="js/sync.js?v=8"></script>
-  <script src="js/room.js?v=8"></script>
-  <script src="js/dashboard.js?v=8"></script>
+  <script src="js/config.js?v=9"></script>
+  <script src="js/sync.js?v=9"></script>
+  <script src="js/room.js?v=9"></script>
+  <script src="js/dashboard.js?v=9"></script>
 </body>
 </html>
