@@ -16,7 +16,8 @@ let status = 'WAITING';
 let lastLive = 0;
 
 // Telefon linki + QR kod
-const phoneUrl = new URL(`phone.html?s=${encodeURIComponent(ID)}`, location.href).href;
+// t=... hər dəfə fərqli olur ki, telefon səhifənin köhnə (cache-dəki) nüsxəsini yox, ən sonuncusunu açsın
+const phoneUrl = new URL(`phone.html?s=${encodeURIComponent(ID)}&t=${Date.now().toString(36)}`, location.href).href;
 $('phone-link').href = phoneUrl;
 $('phone-link').textContent = phoneUrl;
 if (window.QRCode) new QRCode($('qrcode'), { text: phoneUrl, width: 132, height: 132 });
