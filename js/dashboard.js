@@ -9,6 +9,7 @@ $('title').textContent = ID;
 $('s-id').textContent = ID;
 
 const view = new RoomView($('map'));
+bindUnitToggle($('room-form'));
 let run;
 let unsubPoints = null;
 let points = [];
@@ -26,10 +27,10 @@ if (location.protocol !== 'https:') $('https-warn').hidden = false;
 Sync.on(ID, 'meta', (m) => {
   if (!m) { $('s-status').textContent = 'Sessiya yoxdur'; return; }
   view.setRoom(+m.width, +m.height);
-  $('s-room').textContent = `${fmtM(m.width)} × ${fmtM(m.height)} m`
-    + (m.widthSteps ? ` (${m.widthSteps} × ${m.heightSteps} addım)` : '');
-  if (document.activeElement !== $('w')) $('w').value = m.width;
-  if (document.activeElement !== $('h')) $('h').value = m.height;
+  $('s-room').textContent = m.widthSteps
+    ? `${m.widthSteps} × ${m.heightSteps} addım`
+    : `${fmtM(m.width)} × ${fmtM(m.height)} m`;
+  fillRoomForm($('room-form'), m);
 
   view.start = m.start || null;
   $('s-start').textContent = m.start ? `${m.start.x.toFixed(2)}, ${m.start.y.toFixed(2)}` : '—';
@@ -90,9 +91,8 @@ setInterval(updateSignal, 1000);
 
 $('room-form').addEventListener('submit', (e) => {
   e.preventDefault();
-  const width = +$('w').value, height = +$('h').value;
-  // Əl ilə yazılmış ölçü addımla ölçülmüş ölçünü əvəz edir
-  if (width > 0 && height > 0) Sync.update(ID, 'meta', { width, height, widthSteps: null, heightSteps: null });
+  const room = roomFromForm($('room-form'));
+  if (room) Sync.update(ID, 'meta', room);
 });
 
 $('clear').addEventListener('click', async () => {

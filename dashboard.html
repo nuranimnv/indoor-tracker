@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Live Dashboard</title>
-  <link rel="stylesheet" href="css/style.css?v=11">
+  <link rel="stylesheet" href="css/style.css?v=12">
 </head>
 <body>
   <header class="topbar">
@@ -45,10 +45,15 @@
 
       <form id="room-form" class="card stack">
         <h2>Otağın ölçüləri</h2>
-        <div class="row">
-          <div class="field"><label for="w">En (m)</label><input id="w" type="number" min="0.5" max="500" step="0.1" required></div>
-          <div class="field"><label for="h">Uzunluq (m)</label><input id="h" type="number" min="0.5" max="500" step="0.1" required></div>
+        <div class="seg">
+          <label><input type="radio" name="unit" value="m" checked> Metr</label>
+          <label><input type="radio" name="unit" value="step"> Addım</label>
         </div>
+        <div class="row">
+          <div class="field"><label for="w">En (<span class="unit-label">m</span>)</label><input id="w" type="number" min="0.5" max="500" step="0.1" required></div>
+          <div class="field"><label for="h">Uzunluq (<span class="unit-label">m</span>)</label><input id="h" type="number" min="0.5" max="500" step="0.1" required></div>
+        </div>
+        <span id="unit-hint" class="small muted" hidden>Otağın enini və uzunluğunu öz normal addımlarınızla sayın.</span>
         <div class="actions">
           <button class="btn primary" type="submit">Yadda saxla</button>
           <button class="btn" type="button" id="clear">İzi təmizlə</button>
@@ -60,9 +65,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-  <script src="js/config.js?v=11"></script>
-  <script src="js/sync.js?v=11"></script>
-  <script src="js/room.js?v=11"></script>
-  <script src="js/dashboard.js?v=11"></script>
+  <script src="js/config.js?v=12"></script>
+  <script src="js/sync.js?v=12"></script>
+  <script src="js/room.js?v=12"></script>
+  <script src="js/dashboard.js?v=12"></script>
 </body>
 </html>

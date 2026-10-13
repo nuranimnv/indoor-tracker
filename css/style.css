@@ -93,6 +93,11 @@ canvas.map { width: 100%; height: 100%; display: block; touch-action: manipulati
 
 /* ---------- Index ---------- */
 .landing { max-width: 520px; margin: 0 auto; padding: 32px 16px; display: flex; flex-direction: column; gap: 16px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; padding: 3px; background: var(--surface-2); align-self: flex-start; }
+.seg label { padding: 6px 16px; border-radius: 999px; cursor: pointer; font-size: 14px; color: var(--muted); }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label:has(input:checked) { background: var(--accent); color: var(--accent-text); }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; }
 

@@ -116,3 +116,50 @@
 
   window.Sync = Object.assign({ mode: useFirebase ? 'firebase' : 'local', cleanId }, useFirebase ? fb : local);
 })();
+
+// ---------- Otaq ölçüsü formu (giriş səhifəsi və panel üçün ortaq) ----------
+// Ölçü metrlə və ya addımla yazıla bilər. Addımla yazılanda meta-da widthSteps/heightSteps saxlanır,
+// metr ölçüsü isə telefondakı addım uzunluğu ilə hesablanır (telefon qoşulanda öz addım uzunluğu ilə yeniləyir).
+const DEFAULT_STEP_LENGTH = 0.65;
+
+function formUnit(form) {
+  return form.querySelector('input[name="unit"]:checked').value;
+}
+function applyUnitLabels(form) {
+  const steps = formUnit(form) === 'step';
+  form.querySelectorAll('.unit-label').forEach((el) => { el.textContent = steps ? 'addım' : 'm'; });
+  form.querySelectorAll('#w, #h').forEach((el) => {
+    el.step = steps ? '1' : '0.1';
+    el.min = steps ? '1' : '0.5';
+  });
+  const hint = form.querySelector('#unit-hint');
+  if (hint) hint.hidden = !steps;
+}
+function bindUnitToggle(form) {
+  form.querySelectorAll('input[name="unit"]').forEach((r) => r.addEventListener('change', () => applyUnitLabels(form)));
+  applyUnitLabels(form);
+}
+// Formdan meta üçün obyekt: { width, height, widthSteps, heightSteps }
+function roomFromForm(form) {
+  const w = +form.querySelector('#w').value, h = +form.querySelector('#h').value;
+  if (!(w > 0 && h > 0)) return null;
+  if (formUnit(form) === 'step') {
+    const ws = Math.round(w), hs = Math.round(h);
+    return {
+      width: Math.round(ws * DEFAULT_STEP_LENGTH * 100) / 100,
+      height: Math.round(hs * DEFAULT_STEP_LENGTH * 100) / 100,
+      widthSteps: ws,
+      heightSteps: hs
+    };
+  }
+  return { width: w, height: h, widthSteps: null, heightSteps: null };
+}
+// Meta-dakı ölçünü formda göstərir (istifadəçi həmin anda yazmırsa)
+function fillRoomForm(form, m) {
+  if (form.contains(document.activeElement)) return;
+  const steps = !!m.widthSteps;
+  form.querySelector(`input[name="unit"][value="${steps ? 'step' : 'm'}"]`).checked = true;
+  applyUnitLabels(form);
+  form.querySelector('#w').value = steps ? m.widthSteps : m.width;
+  form.querySelector('#h').value = steps ? m.heightSteps : m.height;
+}
