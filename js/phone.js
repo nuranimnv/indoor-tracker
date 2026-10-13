@@ -39,7 +39,19 @@ function bindRange(id, key, digits) {
     settings[key] = +el.value;
     out.textContent = settings[key].toFixed(digits);
     saveSettings();
+    if (key === 'stepLength') syncRoomToStepLength();
   });
+}
+// Otaq addımla ölçülübsə, addım uzunluğu dəyişəndə otağın metrlə ölçüsü də yenilənir —
+// beləliklə otaq həmişə eyni sayda addım qalır.
+let roomStepsTimer = 0;
+function syncRoomToStepLength() {
+  if (!state.wSteps || !state.hSteps) return;
+  clearTimeout(roomStepsTimer);
+  roomStepsTimer = setTimeout(() => Sync.update(ID, 'meta', {
+    width: round2(state.wSteps * settings.stepLength),
+    height: round2(state.hSteps * settings.stepLength)
+  }), 300);
 }
 bindRange('len', 'stepLength', 2);
 bindRange('thr', 'threshold', 1);
@@ -55,6 +67,8 @@ Sync.on(ID, 'meta', (m) => {
   if (!m) return;
   state.w = +m.width;
   state.h = +m.height;
+  state.wSteps = +m.widthSteps || 0;
+  state.hSteps = +m.heightSteps || 0;
   view.setRoom(state.w, state.h);
 
   if (!state.metaLoaded) {
@@ -132,6 +146,10 @@ function onStep() {
   if (measure.active) {
     measure.steps++;
     $('measure').textContent = `■ Bitdi (${measure.steps} addım)`;
+  }
+  if (roomMeasure.phase) {
+    roomMeasure.steps++;
+    showRoomMeasure();
   }
   if (!state.tracking) return;
   state.steps++;
@@ -312,6 +330,7 @@ $('measure').addEventListener('click', async () => {
   $('len').value = settings.stepLength;
   $('len-v').textContent = settings.stepLength.toFixed(2);
   saveSettings();
+  syncRoomToStepLength();
 });
 
 // ---------- Ekran oyaq qalsın ----------
@@ -369,6 +388,42 @@ function closeLoop() {
   $('hint').textContent = `A nöqtəsinə qayıtdınız: ${err.toFixed(2)} m toplanmış xəta yol boyunca paylanıb düzəldildi.`;
 }
 $('closeloop').addEventListener('click', closeLoop);
+
+// ---------- Otağın addımla ölçülməsi ----------
+// Küncdən başlayıb əvvəlcə en (yuxarı divar), sonra uzunluq (yan divar) boyu yeriyirik.
+// Otaq = addım sayı × addım uzunluğu. Nöqtə də eyni addım uzunluğu ilə hərəkət etdiyi üçün
+// N addımlıq divarı keçəndə nöqtə də düz N addımda qarşı divara çatır (addım uzunluğunun xətası ixtisar olunur).
+const roomMeasure = { phase: null, steps: 0, wSteps: 0 };
+function showRoomMeasure() {
+  const b = $('roommeasure');
+  if (roomMeasure.phase === 'width') b.textContent = `■ Künc 2-yə çatdım (en: ${roomMeasure.steps} addım)`;
+  else if (roomMeasure.phase === 'height') b.textContent = `■ Künc 3-ə çatdım (uzunluq: ${roomMeasure.steps} addım)`;
+  else b.textContent = '📏 Otağı addımla ölç';
+}
+$('roommeasure').addEventListener('click', async () => {
+  if (state.tracking) { alert('Əvvəlcə «Dayan» düyməsini basın.'); return; }
+  if (!roomMeasure.phase) {
+    await enableSensors();
+    roomMeasure.phase = 'width';
+    roomMeasure.steps = 0;
+    $('hint').textContent = 'Otağın bir küncündə dayanın, divar boyu (otağın ENİ) normal addımlarla qarşı küncə qədər yeriyin, sonra düyməni basın.';
+  } else if (roomMeasure.phase === 'width') {
+    if (roomMeasure.steps < 2) { alert('Addım sayılmadı. Normal sürətlə, ən azı 3 addım yeriyin.'); return; }
+    roomMeasure.wSteps = roomMeasure.steps;
+    roomMeasure.phase = 'height';
+    roomMeasure.steps = 0;
+    $('hint').textContent = 'İndi 90° dönün və o biri divar boyu (otağın UZUNLUĞU) növbəti küncə qədər yeriyin, sonra düyməni basın.';
+  } else {
+    if (roomMeasure.steps < 2) { alert('Addım sayılmadı. Normal sürətlə, ən azı 3 addım yeriyin.'); return; }
+    const wSteps = roomMeasure.wSteps, hSteps = roomMeasure.steps;
+    roomMeasure.phase = null;
+    const L = settings.stepLength;
+    const width = round2(wSteps * L), height = round2(hSteps * L);
+    Sync.update(ID, 'meta', { width, height, widthSteps: wSteps, heightSteps: hSteps });
+    $('hint').textContent = `Otaq ölçüldü: ${wSteps} × ${hSteps} addım = ${width} × ${height} m. İndi başlanğıc nöqtəsinə (A) toxunun və «Başla» basın.`;
+  }
+  showRoomMeasure();
+});
 
 function newRun() {
   state.run = Date.now();

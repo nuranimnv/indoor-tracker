@@ -25,7 +25,8 @@ if (location.protocol !== 'https:') $('https-warn').hidden = false;
 Sync.on(ID, 'meta', (m) => {
   if (!m) { $('s-status').textContent = 'Sessiya yoxdur'; return; }
   view.setRoom(+m.width, +m.height);
-  $('s-room').textContent = `${fmtM(m.width)} × ${fmtM(m.height)} m`;
+  $('s-room').textContent = `${fmtM(m.width)} × ${fmtM(m.height)} m`
+    + (m.widthSteps ? ` (${m.widthSteps} × ${m.heightSteps} addım)` : '');
   if (document.activeElement !== $('w')) $('w').value = m.width;
   if (document.activeElement !== $('h')) $('h').value = m.height;
 
@@ -89,7 +90,8 @@ setInterval(updateSignal, 1000);
 $('room-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const width = +$('w').value, height = +$('h').value;
-  if (width > 0 && height > 0) Sync.update(ID, 'meta', { width, height });
+  // Əl ilə yazılmış ölçü addımla ölçülmüş ölçünü əvəz edir
+  if (width > 0 && height > 0) Sync.update(ID, 'meta', { width, height, widthSteps: null, heightSteps: null });
 });
 
 $('clear').addEventListener('click', async () => {
