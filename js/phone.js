@@ -276,6 +276,9 @@ function analyzeGait(now) {
   if (!recentActive) energyOnsetAt = null;
 
   if (!recentActive || now < rotatingUntil || n < 40) { stopWalking(); return; }
+  // Period düzgün tapılsın deyə ən azı 1.6 s yeriş məlumatı lazımdır (az məlumatla yarı period seçilə bilər).
+  // Bu müddətdə atılan addımlar yeriş təsdiqlənəndə əlavə olunur.
+  if (!isWalking && now - energyOnsetAt < 1600) return;
 
   const dur = (gaitBuf[n - 1].t - gaitBuf[0].t) / 1000;
   const fs = (n - 1) / dur; // nümunə tezliyi (Hz)
@@ -286,7 +289,9 @@ function analyzeGait(now) {
 
   // Normallaşdırılmış avtokorrelyasiya: ac(lag) = Σ x[i]·x[i+lag] / √(Σx[i]² · Σx[i+lag]²)
   const minLag = Math.max(1, Math.round(MIN_PERIOD * fs));
-  const maxLag = Math.min(Math.round(MAX_PERIOD * fs), n - 15);
+  // Hər lag üçün ən azı 1 s üst-üstə düşən məlumat qalsın
+  const maxLag = Math.min(Math.round(MAX_PERIOD * fs), n - Math.round(1.0 * fs));
+  if (maxLag <= minLag) return;
   const ac = [];
   let best = -1;
   for (let lag = minLag - 1; lag <= maxLag + 1; lag++) {
@@ -316,7 +321,7 @@ function analyzeGait(now) {
     isWalking = true;
     // Aşkarlanana qədər artıq atılmış addımlar
     const walkedSec = energyOnsetAt != null ? (now - energyOnsetAt) / 1000 : 0;
-    stepPhase = Math.min(walkedSec / stepPeriod, 4);
+    stepPhase = Math.min(walkedSec / stepPeriod, 5);
   }
 }
 
