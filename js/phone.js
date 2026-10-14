@@ -213,9 +213,9 @@ function setSensorChip(cls, text) {
 //     Bu, addım periodudur (T). Bir addımdakı iki zirvə (daban + itələmə) periodu dəyişmir, ona görə
 //     addım iki dəfə sayılmır.
 //  3) Yeriş varsa (siqnal kifayət qədər güclü və ritmlidir), addım sayı = yeriş müddəti / T.
-//  4) Son 0.8 s-də siqnal sakitləşibsə və ya telefon sürətlə fırlanırsa, yeriş dərhal dayanmış sayılır.
+//  4) Son 0.6 s-də siqnal sakitləşibsə və ya telefon sürətlə fırlanırsa, yeriş dərhal dayanmış sayılır.
 const GAIT_WINDOW = 2500;   // ms, avtokorrelyasiya pəncərəsi
-const RECENT_WINDOW = 800;  // ms, yerişin dayanmasını tez tutmaq üçün
+const RECENT_WINDOW = 600;  // ms, yerişin dayanmasını tez tutmaq üçün
 const MIN_PERIOD = 0.35, MAX_PERIOD = 1.3; // s, bir addımın mümkün müddəti
 let grav = null, rotatingUntil = 0;
 let gaitBuf = [];           // { t, v } — şaquli təcil
@@ -294,7 +294,7 @@ function analyzeGait(now) {
   if (maxLag <= minLag) return;
   const ac = [];
   let best = -1;
-  for (let lag = minLag - 1; lag <= maxLag + 1; lag++) {
+  for (let lag = Math.max(1, Math.round(minLag / 2) - 1); lag <= maxLag + 1; lag++) {
     let sxy = 0, sxx = 0, syy = 0;
     for (let i = 0; i + lag < n; i++) {
       sxy += x[i] * x[i + lag];
@@ -306,15 +306,17 @@ function analyzeGait(now) {
   }
   if (best < 0.4) { stopWalking(); return; }
 
-  // Ən güclü təkrarın 80%-indən yuxarı olan ilk lokal maksimum — addım periodu
-  let period = null;
-  for (let lag = minLag; lag <= maxLag; lag++) {
-    if (ac[lag] >= 0.8 * best && ac[lag] >= ac[lag - 1] && ac[lag] >= (ac[lag + 1] ?? -1)) {
-      period = lag / fs;
-      break;
-    }
+  // Ən güclü təkrar (bestLag) ya bir addımdır, ya da iki addım (eyni ayaq yenidən yerə dəyir).
+  // Onun yarısı da güclü təkrardırsa və real addım ola biləcək qədər uzundursa (≥ 0.4 s), addım odur.
+  // Yarısı 0.4 s-dən qısadırsa, o, bir addımın içindəki iki zirvədir (daban + itələmə) — addım sayılmır.
+  let bestLag = minLag;
+  for (let lag = minLag; lag <= maxLag; lag++) if (ac[lag] > ac[bestLag]) bestLag = lag;
+  let period = bestLag / fs;
+  const half = Math.round(bestLag / 2);
+  if (half / fs >= 0.4) {
+    const halfAc = Math.max(ac[half - 1] ?? -1, ac[half] ?? -1, ac[half + 1] ?? -1);
+    if (halfAc >= 0.75 * ac[bestLag]) period = half / fs;
   }
-  if (!period) { stopWalking(); return; }
   stepPeriod = stepPeriod && isWalking ? stepPeriod * 0.7 + period * 0.3 : period;
 
   if (!isWalking) {
