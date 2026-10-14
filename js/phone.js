@@ -212,10 +212,18 @@ function setSensorChip(cls, text) {
 //  2) Telefon sürətlə fırlanırsa (giroskop > 150°/s), həmin an addım sayılmır.
 //  3) Zirvə həddi keçəndə "namizəd addım" yaranır; bir addımdakı iki zirvə (daban + itələmə) ayrılmasın deyə
 //     siqnal sıfırdan aşağı düşməyincə yeni namizəd yoxdur, aralarında ən azı 350 ms.
-//  4) Yeriş ritmlidir: ardıcıl 3 namizəd 0.3–1.3 s fasilə ilə gəlməyincə addım sayılmır.
+//  4) Yeriş ritmlidir: ardıcıl 3 namizəd 0.3–1.6 s fasilə ilə gəlməyincə addım sayılmır.
 //     Yeriş təsdiqlənəndən sonra hər namizəd dərhal addımdır (1.5 s fasilə olsa, yeriş dayanmış sayılır).
 let grav = null, vSmooth = 0, armed = true, lastCandAt = -1e9, rotatingUntil = 0;
 let pendingCands = 0, walking = false;
+// Uyğunlaşan hədd: son silkələnmə zirvələrinin orta qiyməti (peakAvg) izlənir, hədd onun yarısıdır.
+// Telefonu qarşıda sakit tutub yumşaq yeriyəndə də addımlar sayılır. Ayarlardakı hədd yuxarı sərhəddir,
+// 0.5 m/s² isə aşağı sərhəd (yerində dayananda əl titrəməsi addım sayılmasın).
+let peakAvg = null, cyclePeak = 0;
+function stepThreshold() {
+  if (peakAvg == null) return settings.threshold;
+  return clamp(peakAvg * 0.5, 0.5, settings.threshold);
+}
 function onMotion(e) {
   const a = e.accelerationIncludingGravity;
   if (!a || a.x == null) return;
@@ -233,7 +241,16 @@ function onMotion(e) {
   const r = e.rotationRate;
   if (r && Math.hypot(r.alpha || 0, r.beta || 0, r.gamma || 0) > 150) rotatingUntil = now + 400;
 
-  if (armed && vSmooth > settings.threshold && now - lastCandAt > 350) {
+  // Hər silkələnmə dövrünün zirvəsini yadda saxlayırıq (siqnal sıfırı aşağı keçəndə dövr bitir)
+  if (vSmooth > cyclePeak) cyclePeak = vSmooth;
+  if (vSmooth < 0 && cyclePeak > 0) {
+    if (cyclePeak > 0.4 && now >= rotatingUntil) {
+      peakAvg = peakAvg == null ? cyclePeak : peakAvg * 0.8 + cyclePeak * 0.2;
+    }
+    cyclePeak = 0;
+  }
+
+  if (armed && vSmooth > stepThreshold() && now - lastCandAt > 350) {
     armed = false;
     onCandidate(now);
   } else if (!armed && vSmooth < 0) {
@@ -247,7 +264,7 @@ function onCandidate(now) {
   if (now < rotatingUntil) { pendingCands = 0; walking = false; return; }
   if (walking && gap <= 1.5) { onStep(); return; }
   walking = false;
-  pendingCands = gap >= 0.3 && gap <= 1.3 ? pendingCands + 1 : 1;
+  pendingCands = gap >= 0.3 && gap <= 1.6 ? pendingCands + 1 : 1;
   if (pendingCands >= 3) {
     walking = true;
     for (let i = 0; i < pendingCands; i++) onStep();
