@@ -218,11 +218,11 @@ let grav = null, vSmooth = 0, armed = true, lastCandAt = -1e9, rotatingUntil = 0
 let pendingCands = 0, walking = false;
 // Uyğunlaşan hədd: son silkələnmə zirvələrinin orta qiyməti (peakAvg) izlənir, hədd onun yarısıdır.
 // Telefonu qarşıda sakit tutub yumşaq yeriyəndə də addımlar sayılır. Ayarlardakı hədd yuxarı sərhəddir,
-// 0.5 m/s² isə aşağı sərhəd (yerində dayananda əl titrəməsi addım sayılmasın).
+// 0.4 m/s² isə aşağı sərhəd (yerində dayananda əl titrəməsi addım sayılmasın).
 let peakAvg = null, cyclePeak = 0;
 function stepThreshold() {
   if (peakAvg == null) return settings.threshold;
-  return clamp(peakAvg * 0.5, 0.5, settings.threshold);
+  return clamp(peakAvg * 0.5, 0.4, settings.threshold);
 }
 function onMotion(e) {
   const a = e.accelerationIncludingGravity;
@@ -244,7 +244,7 @@ function onMotion(e) {
   // Hər silkələnmə dövrünün zirvəsini yadda saxlayırıq (siqnal sıfırı aşağı keçəndə dövr bitir)
   if (vSmooth > cyclePeak) cyclePeak = vSmooth;
   if (vSmooth < 0 && cyclePeak > 0) {
-    if (cyclePeak > 0.4 && now >= rotatingUntil) {
+    if (cyclePeak > 0.3 && now >= rotatingUntil) {
       peakAvg = peakAvg == null ? cyclePeak : peakAvg * 0.8 + cyclePeak * 0.2;
     }
     cyclePeak = 0;
