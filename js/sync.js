@@ -29,9 +29,10 @@
       return () => r.off('value', h);
     },
     pushPoint: (id, run, pt) => fb.ref(id, `path/${run}`).push(pt),
-    // Bütün yolu bir dəfəyə yazır (açarlar sıralı olsun deyə p00000, p00001, ...)
+    // Bütün yolu bir dəfəyə yazır. Açarlar rəqəmdir (0, 1, 2 ...): Firebase rəqəm açarları push() açarlarından
+    // əvvəl sıralayır, ona görə sonradan əlavə olunan nöqtələr yolun sonunda qalır.
     setPoints: (id, run, pts) => fb.ref(id, `path/${run}`).set(
-      Object.fromEntries(pts.map((p, i) => [`p${String(i).padStart(5, '0')}`, p]))
+      Object.fromEntries(pts.map((p, i) => [String(i), p]))
     ),
     onPoints(id, run, cb) {
       const r = fb.ref(id, `path/${run}`);

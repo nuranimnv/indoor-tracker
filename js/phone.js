@@ -206,24 +206,25 @@ function setSensorChip(cls, text) {
   $('sensor').textContent = text;
 }
 
-// Addım aşkarlanması:
-//  1) Cazibə vektoru (yavaş orta qiymət) tapılır, təcilin yalnız ŞAQULİ hissəsi götürülür —
-//     yeriyəndə bədən yuxarı-aşağı silkələnir, telefonu əldə çevirmək isə əsasən başqa istiqamətdə təcil verir.
-//  2) Telefon sürətlə fırlanırsa (giroskop > 150°/s), həmin an addım sayılmır.
-//  3) Zirvə həddi keçəndə "namizəd addım" yaranır; bir addımdakı iki zirvə (daban + itələmə) ayrılmasın deyə
-//     siqnal sıfırdan aşağı düşməyincə yeni namizəd yoxdur, aralarında ən azı 350 ms.
-//  4) Yeriş ritmlidir: ardıcıl 3 namizəd 0.3–1.6 s fasilə ilə gəlməyincə addım sayılmır.
-//     Yeriş təsdiqlənəndən sonra hər namizəd dərhal addımdır (1.5 s fasilə olsa, yeriş dayanmış sayılır).
-let grav = null, vSmooth = 0, armed = true, lastCandAt = -1e9, rotatingUntil = 0;
-let pendingCands = 0, walking = false;
-// Uyğunlaşan hədd: son silkələnmə zirvələrinin orta qiyməti (peakAvg) izlənir, hədd onun yarısıdır.
-// Telefonu qarşıda sakit tutub yumşaq yeriyəndə də addımlar sayılır. Ayarlardakı hədd yuxarı sərhəddir,
-// 0.4 m/s² isə aşağı sərhəd (yerində dayananda əl titrəməsi addım sayılmasın).
-let peakAvg = null, cyclePeak = 0;
-function stepThreshold() {
-  if (peakAvg == null) return settings.threshold;
-  return clamp(peakAvg * 0.5, 0.4, settings.threshold);
-}
+// ---------- Addım aşkarlanması (yeriş ritmi ilə) ----------
+//  1) Cazibə vektoru (yavaş orta qiymət) tapılır, təcilin yalnız ŞAQULİ hissəsi götürülür:
+//     yeriyəndə bədən hər addımda yuxarı-aşağı silkələnir.
+//  2) Son 2.5 s-lik siqnalın avtokorrelyasiyası hesablanır və siqnalın nə qədər vaxtdan bir təkrarlandığı tapılır.
+//     Bu, addım periodudur (T). Bir addımdakı iki zirvə (daban + itələmə) periodu dəyişmir, ona görə
+//     addım iki dəfə sayılmır.
+//  3) Yeriş varsa (siqnal kifayət qədər güclü və ritmlidir), addım sayı = yeriş müddəti / T.
+//  4) Son 0.8 s-də siqnal sakitləşibsə və ya telefon sürətlə fırlanırsa, yeriş dərhal dayanmış sayılır.
+const GAIT_WINDOW = 2500;   // ms, avtokorrelyasiya pəncərəsi
+const RECENT_WINDOW = 800;  // ms, yerişin dayanmasını tez tutmaq üçün
+const MIN_PERIOD = 0.35, MAX_PERIOD = 1.3; // s, bir addımın mümkün müddəti
+let grav = null, rotatingUntil = 0;
+let gaitBuf = [];           // { t, v } — şaquli təcil
+let gaitAnalyzedAt = 0, stepPeriod = null, isWalking = false, stepPhase = 0;
+let lastMotionAt = null, energyOnsetAt = null;
+
+// Yerişin güc həddi (şaquli təcilin standart meyli, m/s²). Ayarlardakı «həssaslıq» onu miqyaslayır.
+const energyGate = () => 0.2 * settings.threshold / 1.2;
+
 function onMotion(e) {
   const a = e.accelerationIncludingGravity;
   if (!a || a.x == null) return;
@@ -236,39 +237,86 @@ function onMotion(e) {
   grav.z = grav.z * 0.97 + a.z * 0.03;
   const gLen = Math.hypot(grav.x, grav.y, grav.z) || 1;
   const vert = ((a.x - grav.x) * grav.x + (a.y - grav.y) * grav.y + (a.z - grav.z) * grav.z) / gLen;
-  vSmooth = vSmooth * 0.75 + vert * 0.25;
 
   const r = e.rotationRate;
   if (r && Math.hypot(r.alpha || 0, r.beta || 0, r.gamma || 0) > 150) rotatingUntil = now + 400;
 
-  // Hər silkələnmə dövrünün zirvəsini yadda saxlayırıq (siqnal sıfırı aşağı keçəndə dövr bitir)
-  if (vSmooth > cyclePeak) cyclePeak = vSmooth;
-  if (vSmooth < 0 && cyclePeak > 0) {
-    if (cyclePeak > 0.3 && now >= rotatingUntil) {
-      peakAvg = peakAvg == null ? cyclePeak : peakAvg * 0.8 + cyclePeak * 0.2;
-    }
-    cyclePeak = 0;
+  gaitBuf.push({ t: now, v: vert });
+  while (gaitBuf.length && now - gaitBuf[0].t > GAIT_WINDOW) gaitBuf.shift();
+  if (now - gaitAnalyzedAt >= 250) {
+    gaitAnalyzedAt = now;
+    analyzeGait(now);
   }
 
-  if (armed && vSmooth > stepThreshold() && now - lastCandAt > 350) {
-    armed = false;
-    onCandidate(now);
-  } else if (!armed && vSmooth < 0) {
-    armed = true;
+  // Yeriş davam edirsə, addım fazası zamanla artır; hər tam dövr bir addımdır
+  if (isWalking && stepPeriod && lastMotionAt != null) {
+    stepPhase += (now - lastMotionAt) / 1000 / stepPeriod;
+    while (stepPhase >= 1) { stepPhase -= 1; onStep(); }
   }
+  lastMotionAt = now;
 }
 
-function onCandidate(now) {
-  const gap = (now - lastCandAt) / 1000;
-  lastCandAt = now;
-  if (now < rotatingUntil) { pendingCands = 0; walking = false; return; }
-  if (walking && gap <= 1.5) { onStep(); return; }
-  walking = false;
-  pendingCands = gap >= 0.3 && gap <= 1.6 ? pendingCands + 1 : 1;
-  if (pendingCands >= 3) {
-    walking = true;
-    for (let i = 0; i < pendingCands; i++) onStep();
-    pendingCands = 0;
+function std(values) {
+  const m = values.reduce((s, v) => s + v, 0) / values.length;
+  return Math.sqrt(values.reduce((s, v) => s + (v - m) * (v - m), 0) / values.length);
+}
+
+function stopWalking() {
+  isWalking = false;
+  stepPhase = 0;
+}
+
+function analyzeGait(now) {
+  const n = gaitBuf.length;
+  const recent = gaitBuf.filter((s) => now - s.t <= RECENT_WINDOW).map((s) => s.v);
+  const recentActive = recent.length > 10 && std(recent) > energyGate();
+
+  // Yerişin başladığı anı yadda saxlayırıq: aşkarlanana qədər keçən addımlar da sayılsın
+  if (recentActive && energyOnsetAt == null) energyOnsetAt = now - RECENT_WINDOW / 2;
+  if (!recentActive) energyOnsetAt = null;
+
+  if (!recentActive || now < rotatingUntil || n < 40) { stopWalking(); return; }
+
+  const dur = (gaitBuf[n - 1].t - gaitBuf[0].t) / 1000;
+  const fs = (n - 1) / dur; // nümunə tezliyi (Hz)
+  const xs = gaitBuf.map((s) => s.v);
+  const mean = xs.reduce((s, v) => s + v, 0) / n;
+  const x = xs.map((v) => v - mean);
+  if (std(xs) < energyGate()) { stopWalking(); return; }
+
+  // Normallaşdırılmış avtokorrelyasiya: ac(lag) = Σ x[i]·x[i+lag] / √(Σx[i]² · Σx[i+lag]²)
+  const minLag = Math.max(1, Math.round(MIN_PERIOD * fs));
+  const maxLag = Math.min(Math.round(MAX_PERIOD * fs), n - 15);
+  const ac = [];
+  let best = -1;
+  for (let lag = minLag - 1; lag <= maxLag + 1; lag++) {
+    let sxy = 0, sxx = 0, syy = 0;
+    for (let i = 0; i + lag < n; i++) {
+      sxy += x[i] * x[i + lag];
+      sxx += x[i] * x[i];
+      syy += x[i + lag] * x[i + lag];
+    }
+    ac[lag] = sxx && syy ? sxy / Math.sqrt(sxx * syy) : 0;
+    if (lag >= minLag && lag <= maxLag && ac[lag] > best) best = ac[lag];
+  }
+  if (best < 0.4) { stopWalking(); return; }
+
+  // Ən güclü təkrarın 80%-indən yuxarı olan ilk lokal maksimum — addım periodu
+  let period = null;
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    if (ac[lag] >= 0.8 * best && ac[lag] >= ac[lag - 1] && ac[lag] >= (ac[lag + 1] ?? -1)) {
+      period = lag / fs;
+      break;
+    }
+  }
+  if (!period) { stopWalking(); return; }
+  stepPeriod = stepPeriod && isWalking ? stepPeriod * 0.7 + period * 0.3 : period;
+
+  if (!isWalking) {
+    isWalking = true;
+    // Aşkarlanana qədər artıq atılmış addımlar
+    const walkedSec = energyOnsetAt != null ? (now - energyOnsetAt) / 1000 : 0;
+    stepPhase = Math.min(walkedSec / stepPeriod, 4);
   }
 }
 
