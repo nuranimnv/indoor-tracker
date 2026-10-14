@@ -213,7 +213,8 @@ function setSensorChip(cls, text) {
 //     Bu, addım periodudur (T). Bir addımdakı iki zirvə (daban + itələmə) periodu dəyişmir, ona görə
 //     addım iki dəfə sayılmır.
 //  3) Yeriş varsa (siqnal kifayət qədər güclü və ritmlidir), addım sayı = yeriş müddəti / T.
-//  4) Son 0.6 s-də siqnal sakitləşibsə və ya telefon sürətlə fırlanırsa, yeriş dərhal dayanmış sayılır.
+//  4) Son 0.6 s-də siqnal sakitləşibsə, adam dönürsə (istiqamət 1 s-də 30°+ dəyişib) və ya telefon
+//     əldə sürətlə fırlanırsa, addım sayılmır.
 const GAIT_WINDOW = 2500;   // ms, avtokorrelyasiya pəncərəsi
 const RECENT_WINDOW = 600;  // ms, yerişin dayanmasını tez tutmaq üçün
 const MIN_PERIOD = 0.35, MAX_PERIOD = 1.3; // s, bir addımın mümkün müddəti
@@ -266,16 +267,28 @@ function stopWalking() {
   stepPhase = 0;
 }
 
+// Dönmənin aşkarlanması: istiqamət son 1 s-də 30°-dən çox dəyişibsə, adam dönür (çox vaxt yerində).
+// Dönərkən ayaqlar yerində tərpənir, amma bu, irəli addım deyil — addım sayılmır.
+const TURN_WINDOW = 1000, TURN_DEG = 30;
+let headingHist = [];
+function isTurning() {
+  if (headingHist.length < 2 || state.rawHeading == null) return false;
+  const cur = state.rawHeading;
+  return headingHist.some((s) => Math.abs(((s.h - cur + 540) % 360) - 180) > TURN_DEG);
+}
+
 function analyzeGait(now) {
   const n = gaitBuf.length;
   const recent = gaitBuf.filter((s) => now - s.t <= RECENT_WINDOW).map((s) => s.v);
   const recentActive = recent.length > 10 && std(recent) > energyGate();
 
   // Yerişin başladığı anı yadda saxlayırıq: aşkarlanana qədər keçən addımlar da sayılsın
-  if (recentActive && energyOnsetAt == null) energyOnsetAt = now - RECENT_WINDOW / 2;
-  if (!recentActive) energyOnsetAt = null;
+  // Dönmə və ya telefonun əldə fırladılması zamanı yığılan silkələnmə yerişin başlanğıcı sayılmır
+  const turning = isTurning() || now < rotatingUntil;
+  if (recentActive && !turning && energyOnsetAt == null) energyOnsetAt = now - RECENT_WINDOW / 2;
+  if (!recentActive || turning) energyOnsetAt = null;
 
-  if (!recentActive || now < rotatingUntil || n < 40) { stopWalking(); return; }
+  if (!recentActive || turning || n < 40) { stopWalking(); return; }
   // Period düzgün tapılsın deyə ən azı 1.6 s yeriş məlumatı lazımdır (az məlumatla yarı period seçilə bilər).
   // Bu müddətdə atılan addımlar yeriş təsdiqlənəndə əlavə olunur.
   if (!isWalking && now - energyOnsetAt < 1600) return;
@@ -323,7 +336,7 @@ function analyzeGait(now) {
     isWalking = true;
     // Aşkarlanana qədər artıq atılmış addımlar
     const walkedSec = energyOnsetAt != null ? (now - energyOnsetAt) / 1000 : 0;
-    stepPhase = Math.min(walkedSec / stepPeriod, 5);
+    stepPhase = Math.min(walkedSec / stepPeriod, 3);
   }
 }
 
@@ -365,6 +378,9 @@ function updateHeading(deg) {
   if (!hInit) { hx = Math.sin(r); hy = Math.cos(r); hInit = true; }
   else { hx = hx * 0.8 + Math.sin(r) * 0.2; hy = hy * 0.8 + Math.cos(r) * 0.2; }
   state.rawHeading = (Math.atan2(hx, hy) * 180 / Math.PI + 360) % 360;
+  const now = performance.now();
+  headingHist.push({ t: now, h: state.rawHeading });
+  while (headingHist.length && now - headingHist[0].t > TURN_WINDOW) headingHist.shift();
   // Kalibrləmə sensor hələ oxunmamışdan istənibsə, ilk sabit oxunuşda edirik
   if (pendingCalib && ++headingSamples > 10) {
     pendingCalib = false;
