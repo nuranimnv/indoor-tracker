@@ -221,11 +221,12 @@ function setSensorChip(cls, text) {
 //     Yuxarı hədd uyğunlaşandır: son addımların orta zirvə gücünün 45%-i (amma minimumdan az deyil).
 //     Güclü yerişdə dönüşdəki kiçik silkələnmə sayılmır, zəif yerişdə isə hədd aşağı düşür.
 //  3) Təsadüfi silkələnmə addım sayılmasın deyə yeriş 2 ardıcıl addımla (aralarında ≤ 2 s) başlayır;
-//     birinci addım da həmin an əlavə olunur.
+//     birinci addım da həmin an əlavə olunur. Tək addım isə zirvəsi güclüdürsə (≥ SINGLE_MIN) və ardınca
+//     çökəklik gəlibsə, 2-ci addımı gözləmədən sayılır.
 //  4) Adam dönürsə (istiqamət 1 s-də 30°+ dəyişib) və ya telefon əldə sürətlə fırlanırsa, addım sayılmır.
 const MIN_STEP_GAP = 300, MAX_STEP_GAP = 2000; // ms
 // Hədlər (m/s²). Ayarlardakı «həssaslıq» onları miqyaslayır (default 1.0).
-const PEAK_MIN = 0.6;
+const PEAK_MIN = 0.6, SINGLE_MIN = 1.2;
 const peakHigh = () => Math.max(PEAK_MIN * settings.threshold, 0.45 * stepPeakAvg);
 const peakLow = () => -0.4 * settings.threshold;
 let grav = null, rotatingUntil = 0;
@@ -264,6 +265,13 @@ function onMotion(e) {
   if (!armed && smooth < peakLow()) {
     armed = true;
     if (peakCounted) stepPeakAvg = stepPeakAvg ? stepPeakAvg * 0.7 + peakMax * 0.3 : peakMax;
+    // Tək güclü addım: zirvə + çökəklik tamamlandı — 2-ci addımı gözləmədən sayırıq.
+    // Sonrakı addım 2 s ərzində gəlsə, adi yeriş kimi davam edir (isWalking).
+    if (firstStepAt != null && peakMax >= SINGLE_MIN * settings.threshold && !isTurning() && now >= rotatingUntil) {
+      firstStepAt = null;
+      isWalking = true;
+      onStep();
+    }
   }
   if (armed && smooth > peakHigh()) {
     armed = false;
