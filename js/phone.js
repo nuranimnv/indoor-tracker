@@ -215,24 +215,22 @@ function setSensorChip(cls, text) {
 // ---------- Addım aşkarlanması ----------
 //  1) Cazibə vektoru (yavaş orta qiymət) tapılır, təcilin yalnız ŞAQULİ hissəsi götürülür və bir az hamarlanır:
 //     yeriyəndə hər addımda ayaq yerə dəyəndə bu siqnalda bir böyük müsbət zirvə, ardınca çökəklik olur.
-//  2) Siqnal yuxarı həddi keçəndə bir addım sayılır. Növbəti addım üçün siqnal əvvəlcə aşağı həddən enməlidir
-//     və iki addım arası ən azı 0.3 s olmalıdır — beləliklə bir addım iki dəfə sayılmır.
-//     Addımlar zirvəyə görə sayılır: adam dayananda zirvə yoxdur, əlavə addım yazılmır.
-//     Yuxarı hədd uyğunlaşandır: son addımların orta zirvə gücünün 45%-i (amma minimumdan az deyil).
-//     Güclü yerişdə dönüşdəki kiçik silkələnmə sayılmır, zəif yerişdə isə hədd aşağı düşür.
-//  3) Təsadüfi silkələnmə addım sayılmasın deyə yeriş 2 ardıcıl addımla (aralarında ≤ 2 s) başlayır;
-//     birinci addım da həmin an əlavə olunur. Tək addım isə zirvəsi güclüdürsə (≥ SINGLE_MIN) və ardınca
-//     çökəklik gəlibsə, 2-ci addımı gözləmədən sayılır.
-//  4) Adam dönürsə (istiqamət 1 s-də 30°+ dəyişib) və ya telefon əldə sürətlə fırlanırsa, addım sayılmır.
+//  2) Zirvə: siqnal PEAK_MIN-i keçib sonra aşağı həddən enəndə tamamlanır (histerezis) — beləliklə
+//     bir addım iki dəfə sayılmır. Qərar zirvə tamamlananda verilir, onun tam gücü (max) artıq məlumdur.
+//  3) Dayananda bədənin silkələnməsi və çəkinin ayaqdan ayağa keçməsi real addımın təxminən yarısı qədərdir,
+//     ona görə son addımların orta gücünün 60%-indən zəif zirvə addım sayılmır. Addım gücü dayanandan
+//     sonra da yadda qalır və tədricən (~45 s) unudulur. İki addım arası ən azı 0.3 s olmalıdır.
+//  4) Güclü zirvə (≥ SINGLE_MIN) dərhal addım sayılır — tək addım da işləyir. Zəif zirvələr isə yalnız
+//     2 s ərzində oxşar güclü ikinci zirvə gələndə (yavaş, yumşaq yeriş) ikisi birlikdə sayılır.
+//  5) Adam dönürsə (istiqamət 1 s-də 30°+ dəyişib) və ya telefon əldə sürətlə fırlanırsa, addım sayılmır.
 const MIN_STEP_GAP = 300, MAX_STEP_GAP = 2000; // ms
 // Hədlər (m/s²). Ayarlardakı «həssaslıq» onları miqyaslayır (default 1.0).
-const PEAK_MIN = 0.6, SINGLE_MIN = 1.2;
-const peakHigh = () => Math.max(PEAK_MIN * settings.threshold, 0.45 * stepPeakAvg);
+const PEAK_MIN = 0.6, SINGLE_MIN = 1.6;
 const peakLow = () => -0.4 * settings.threshold;
 let grav = null, rotatingUntil = 0;
-let smooth = 0, prevT = 0, armed = true;
-let lastPeakAt = -Infinity, isWalking = false, firstStepAt = null;
-let stepPeakAvg = 0, peakMax = 0, peakCounted = false; // son addımların orta zirvə gücü
+let smooth = 0, prevT = 0, armed = true, peakAt = 0, peakMax = 0;
+let lastStepAt = -Infinity, isWalking = false, firstPeak = null;
+let stepPeakAvg = 0; // son addımların orta zirvə gücü
 
 function onMotion(e) {
   const a = e.accelerationIncludingGravity;
@@ -260,48 +258,56 @@ function onMotion(e) {
   if (r && Math.hypot(r.alpha || 0, r.beta || 0, r.gamma || 0) > 150) rotatingUntil = now + 400;
 
   smooth += (vert - smooth) * kSmooth;
-  if (now - lastPeakAt > 3000) stepPeakAvg = 0; // uzun fasilədən sonra hədd minimuma qayıdır
-  if (!armed) peakMax = Math.max(peakMax, smooth);
-  if (!armed && smooth < peakLow()) {
-    armed = true;
-    if (peakCounted) stepPeakAvg = stepPeakAvg ? stepPeakAvg * 0.7 + peakMax * 0.3 : peakMax;
-    // Tək güclü addım: zirvə + çökəklik tamamlandı — 2-ci addımı gözləmədən sayırıq.
-    // Sonrakı addım 2 s ərzində gəlsə, adi yeriş kimi davam edir (isWalking).
-    if (firstStepAt != null && peakMax >= SINGLE_MIN * settings.threshold && !isTurning() && now >= rotatingUntil) {
-      firstStepAt = null;
-      isWalking = true;
-      onStep();
-    }
-  }
-  if (armed && smooth > peakHigh()) {
+  if (now - lastStepAt > MAX_STEP_GAP) stepPeakAvg *= Math.exp(-dt / 45000);
+  if (armed && smooth > PEAK_MIN * settings.threshold) {
     armed = false;
+    peakAt = now;
     peakMax = smooth;
-    peakCounted = onPeak(now);
+  }
+  if (!armed) {
+    peakMax = Math.max(peakMax, smooth);
+    if (smooth < peakLow()) {
+      armed = true;
+      onPeak(peakAt, peakMax);
+    }
   }
 }
 
-// Zirvə addım (və ya yerişin ilk addımı) kimi qəbul olunubsa true qaytarır
-function onPeak(t) {
+function countStep(t, max) {
+  lastStepAt = t;
+  stepPeakAvg = stepPeakAvg ? stepPeakAvg * 0.7 + max * 0.3 : max;
+  onStep();
+}
+
+// t — zirvənin başlanğıcı, max — onun gücü
+function onPeak(t, max) {
   if (isTurning() || t < rotatingUntil) {
-    // Dönmə zamanı silkələnmə addım deyil; dönüşdən sonra yeriş yenidən 2 addımla başlayır
+    // Dönmə zamanı silkələnmə addım deyil
     isWalking = false;
-    firstStepAt = null;
-    return false;
+    firstPeak = null;
+    return;
   }
-  const gap = t - lastPeakAt;
-  if (gap < MIN_STEP_GAP) return false;
-  lastPeakAt = t;
-  if (gap > MAX_STEP_GAP) isWalking = false;
-  if (isWalking) { onStep(); return true; }
-  if (firstStepAt != null && t - firstStepAt <= MAX_STEP_GAP) {
+  if (max < 0.6 * stepPeakAvg) return;        // dayanma silkələnməsi / çəki keçirmə
+  if (t - lastStepAt < MIN_STEP_GAP) return;
+  if (t - lastStepAt > MAX_STEP_GAP) isWalking = false;
+  if (isWalking || max >= SINGLE_MIN * settings.threshold) {
+    // Əvvəlki zəif zirvə (çəkinin keçirilməsi) addım deyildi
+    firstPeak = null;
     isWalking = true;
-    firstStepAt = null;
-    onStep(); // gözləyən birinci addım
-    onStep();
-  } else {
-    firstStepAt = t;
+    countStep(t, max);
+    return;
   }
-  return true;
+  // Zəif zirvə: oxşar ikinci zirvə 2 s ərzində gələrsə, ikisi də addımdır
+  if (firstPeak && t - firstPeak.t <= MAX_STEP_GAP &&
+      Math.min(firstPeak.max, max) >= 0.6 * Math.max(firstPeak.max, max)) {
+    const first = firstPeak;
+    firstPeak = null;
+    isWalking = true;
+    countStep(first.t, first.max);
+    countStep(t, max);
+    return;
+  }
+  firstPeak = { t, max };
 }
 
 // Dönmənin aşkarlanması: istiqamət son 1 s-də 30°-dən çox dəyişibsə, adam dönür (çox vaxt yerində).
