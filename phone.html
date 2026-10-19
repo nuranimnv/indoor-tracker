@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#17695e">
   <title>Phone Tracker</title>
-  <link rel="stylesheet" href="css/style.css?v=19">
+  <link rel="stylesheet" href="css/style.css?v=20">
 </head>
 <body>
   <main class="phone">
@@ -58,6 +58,8 @@
           <label for="thr">Addım həssaslığı: <b id="thr-v"></b> — kiçik dəyər = daha həssas (yumşaq yerişdə addım sayılmırsa azaldın)</label>
           <input id="thr" type="range" min="0.5" max="3" step="0.1">
         </div>
+        <button id="rec" class="btn" type="button">● Sensor yazısı</button>
+        <span class="small muted">Addım sayğacını yoxlamaq üçün: düyməni basın, addımlarınızı özünüz sayaraq yeriyin, dayanın, yenidən basın və neçə addım atdığınızı yazın. Məlumat təhlil üçün göndərilir.</span>
       </div>
     </details>
 
@@ -75,9 +77,9 @@
 
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-  <script src="js/config.js?v=19"></script>
-  <script src="js/sync.js?v=19"></script>
-  <script src="js/room.js?v=19"></script>
-  <script src="js/phone.js?v=19"></script>
+  <script src="js/config.js?v=20"></script>
+  <script src="js/sync.js?v=20"></script>
+  <script src="js/room.js?v=20"></script>
+  <script src="js/phone.js?v=20"></script>
 </body>
 </html>

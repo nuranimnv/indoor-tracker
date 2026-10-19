@@ -151,6 +151,7 @@ function moveBy(dx, dy) {
 }
 
 function onStep() {
+  if (rec.on) rec.steps.push(Math.round(performance.now() - rec.t0));
   if (measure.active) {
     measure.steps++;
     $('measure').textContent = `■ Bitdi (${measure.steps} addım)`;
@@ -237,15 +238,23 @@ function onMotion(e) {
   if (!a || a.x == null) return;
   gotMotion = true;
   const now = performance.now();
+  // Filtrlər zamana görə: telefon 60 Hz və ya 200 Hz göndərsə də eyni işləsin
+  const dt = prevT ? Math.min(Math.max(now - prevT, 1), 100) : 1000 / 60;
+  const kGrav = 1 - Math.exp(-dt / 550), kSmooth = 1 - Math.exp(-dt / 39);
 
   if (!grav) grav = { x: a.x, y: a.y, z: a.z };
-  grav.x = grav.x * 0.97 + a.x * 0.03;
-  grav.y = grav.y * 0.97 + a.y * 0.03;
-  grav.z = grav.z * 0.97 + a.z * 0.03;
+  grav.x += (a.x - grav.x) * kGrav;
+  grav.y += (a.y - grav.y) * kGrav;
+  grav.z += (a.z - grav.z) * kGrav;
   const gLen = Math.hypot(grav.x, grav.y, grav.z) || 1;
   const vert = ((a.x - grav.x) * grav.x + (a.y - grav.y) * grav.y + (a.z - grav.z) * grav.z) / gLen;
 
   const r = e.rotationRate;
+  if (rec.on && rec.samples.length < REC_MAX) {
+    rec.samples.push([Math.round(now - rec.t0), round2(a.x), round2(a.y), round2(a.z),
+      r ? Math.round(r.alpha || 0) : 0, r ? Math.round(r.beta || 0) : 0, r ? Math.round(r.gamma || 0) : 0,
+      state.rawHeading == null ? -1 : Math.round(state.rawHeading)]);
+  }
   if (r && Math.hypot(r.alpha || 0, r.beta || 0, r.gamma || 0) > 150) rotatingUntil = now + 400;
 
   gaitBuf.push({ t: now, v: vert });
@@ -256,7 +265,7 @@ function onMotion(e) {
   }
 
   // Zirvə: hamarlanmış siqnal həddi keçib enməyə başlayanda. Növbəti zirvə üçün siqnal sıfırdan aşağı enməlidir.
-  smooth = smooth * 0.65 + vert * 0.35;
+  smooth += (vert - smooth) * kSmooth;
   if (smooth < 0) armed = true;
   const peakGate = Math.max(1.5 * energyGate(), 0.8 * gaitStd);
   if (armed && prevSmooth > peakGate && smooth < prevSmooth) {
@@ -462,6 +471,35 @@ $('measure').addEventListener('click', async () => {
   $('len-v').textContent = settings.stepLength.toFixed(2);
   saveSettings();
   syncRoomToStepLength();
+});
+
+// ---------- Sensor yazısı (addım sayğacının təhlili üçün) ----------
+// Xam akselerometr/giroskop məlumatı yazılır və Firebase-ə (sessions/{id}/debug/{vaxt}) göndərilir.
+// Hər nümunə: [t ms, ax, ay, az, fırlanma α, β, γ, istiqamət]. steps — sayğacın addım saydığı anlar.
+const REC_MAX = 12000; // ~60 s (200 Hz-də) / ~3 dəq (60 Hz-də)
+const rec = { on: false, t0: 0, samples: [], steps: [] };
+$('rec').addEventListener('click', async () => {
+  if (!rec.on) {
+    await enableSensors();
+    Object.assign(rec, { on: true, t0: performance.now(), samples: [], steps: [] });
+    $('rec').textContent = '■ Yazını bitir';
+    return;
+  }
+  rec.on = false;
+  $('rec').textContent = '● Sensor yazısı';
+  const answer = prompt(`Sayğac ${rec.steps.length} addım saydı. Əslində neçə addım atdınız?`, '');
+  const actual = parseInt(answer, 10);
+  if (!(actual >= 0)) return;
+  const key = Date.now();
+  await Sync.set(ID, `debug/${key}`, {
+    actual,
+    counted: rec.steps.length,
+    steps: rec.steps,
+    samples: rec.samples,
+    threshold: settings.threshold,
+    ua: navigator.userAgent
+  });
+  alert(`Göndərildi (${rec.samples.length} nümunə). Kod: ${key}`);
 });
 
 // ---------- Ekran oyaq qalsın ----------
