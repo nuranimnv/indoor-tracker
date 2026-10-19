@@ -212,7 +212,10 @@ function setSensorChip(cls, text) {
 //  2) Son 2.5 s-lik siqnalın avtokorrelyasiyası hesablanır və siqnalın nə qədər vaxtdan bir təkrarlandığı tapılır.
 //     Bu, addım periodudur (T). Bir addımdakı iki zirvə (daban + itələmə) periodu dəyişmir, ona görə
 //     addım iki dəfə sayılmır.
-//  3) Yeriş varsa (siqnal kifayət qədər güclü və ritmlidir), addım sayı = yeriş müddəti / T.
+//  3) Yeriş varsa (siqnal kifayət qədər güclü və ritmlidir), hər real zirvə bir addımdır.
+//     Zirvələr arası ən azı 0.6·T olmalıdır və siqnal arada sıfırdan aşağı enməlidir — beləliklə
+//     bir addımın iki zirvəsi iki addım sayılmır. Addımlar vaxta görə yox, zirvəyə görə sayılır:
+//     adam dayananda zirvə də yoxdur, əlavə addım yazılmır.
 //  4) Son 0.6 s-də siqnal sakitləşibsə, adam dönürsə (istiqamət 1 s-də 30°+ dəyişib) və ya telefon
 //     əldə sürətlə fırlanırsa, addım sayılmır.
 const GAIT_WINDOW = 2500;   // ms, avtokorrelyasiya pəncərəsi
@@ -220,8 +223,11 @@ const RECENT_WINDOW = 600;  // ms, yerişin dayanmasını tez tutmaq üçün
 const MIN_PERIOD = 0.35, MAX_PERIOD = 1.3; // s, bir addımın mümkün müddəti
 let grav = null, rotatingUntil = 0;
 let gaitBuf = [];           // { t, v } — şaquli təcil
-let gaitAnalyzedAt = 0, stepPeriod = null, isWalking = false, stepPhase = 0;
-let lastMotionAt = null, energyOnsetAt = null;
+let gaitAnalyzedAt = 0, stepPeriod = null, isWalking = false;
+let energyOnsetAt = null, gaitStd = 0;
+// Zirvə axtarışı: hamarlanmış şaquli təcil
+let smooth = 0, prevSmooth = 0, prevT = 0, armed = true, lastPeakAt = -Infinity;
+let pendingPeaks = [];      // yeriş təsdiqlənənə qədər tapılan zirvələrin vaxtları
 
 // Yerişin güc həddi (şaquli təcilin standart meyli, m/s²). Ayarlardakı «həssaslıq» onu miqyaslayır.
 const energyGate = () => 0.2 * settings.threshold / 1.2;
@@ -249,12 +255,32 @@ function onMotion(e) {
     analyzeGait(now);
   }
 
-  // Yeriş davam edirsə, addım fazası zamanla artır; hər tam dövr bir addımdır
-  if (isWalking && stepPeriod && lastMotionAt != null) {
-    stepPhase += (now - lastMotionAt) / 1000 / stepPeriod;
-    while (stepPhase >= 1) { stepPhase -= 1; onStep(); }
+  // Zirvə: hamarlanmış siqnal həddi keçib enməyə başlayanda. Növbəti zirvə üçün siqnal sıfırdan aşağı enməlidir.
+  smooth = smooth * 0.65 + vert * 0.35;
+  if (smooth < 0) armed = true;
+  const peakGate = Math.max(1.5 * energyGate(), 0.8 * gaitStd);
+  if (armed && prevSmooth > peakGate && smooth < prevSmooth) {
+    armed = false;
+    onPeak(prevT, prevSmooth);
   }
-  lastMotionAt = now;
+  prevSmooth = smooth;
+  prevT = now;
+}
+
+// İki addım arası minimum vaxt. Period səhvən iki addım (eyni ayaq) götürülsə belə, real addım
+// atılmasın deyə 0.42 s ilə məhdudlaşdırılır: bir addımın iki zirvəsi bundan yaxındır.
+function minStepGap() {
+  return Math.min(stepPeriod ? 0.6 * stepPeriod : MIN_PERIOD, 0.42) * 1000;
+}
+
+function onPeak(t, v) {
+  if (isWalking) {
+    if (t - lastPeakAt < minStepGap()) return;
+    lastPeakAt = t;
+    onStep();
+  } else {
+    pendingPeaks.push({ t, v });
+  }
 }
 
 function std(values) {
@@ -264,7 +290,6 @@ function std(values) {
 
 function stopWalking() {
   isWalking = false;
-  stepPhase = 0;
 }
 
 // Dönmənin aşkarlanması: istiqamət son 1 s-də 30°-dən çox dəyişibsə, adam dönür (çox vaxt yerində).
@@ -279,6 +304,7 @@ function isTurning() {
 
 function analyzeGait(now) {
   const n = gaitBuf.length;
+  gaitStd = n ? std(gaitBuf.map((s) => s.v)) : 0; // zirvə həddi üçün
   const recent = gaitBuf.filter((s) => now - s.t <= RECENT_WINDOW).map((s) => s.v);
   const recentActive = recent.length > 10 && std(recent) > energyGate();
 
@@ -286,7 +312,7 @@ function analyzeGait(now) {
   // Dönmə və ya telefonun əldə fırladılması zamanı yığılan silkələnmə yerişin başlanğıcı sayılmır
   const turning = isTurning() || now < rotatingUntil;
   if (recentActive && !turning && energyOnsetAt == null) energyOnsetAt = now - RECENT_WINDOW / 2;
-  if (!recentActive || turning) energyOnsetAt = null;
+  if (!recentActive || turning) { energyOnsetAt = null; pendingPeaks = []; }
 
   if (!recentActive || turning || n < 40) { stopWalking(); return; }
   // Period düzgün tapılsın deyə ən azı 1.6 s yeriş məlumatı lazımdır (az məlumatla yarı period seçilə bilər).
@@ -298,7 +324,7 @@ function analyzeGait(now) {
   const xs = gaitBuf.map((s) => s.v);
   const mean = xs.reduce((s, v) => s + v, 0) / n;
   const x = xs.map((v) => v - mean);
-  if (std(xs) < energyGate()) { stopWalking(); return; }
+  if (gaitStd < energyGate()) { stopWalking(); return; }
 
   // Normallaşdırılmış avtokorrelyasiya: ac(lag) = Σ x[i]·x[i+lag] / √(Σx[i]² · Σx[i+lag]²)
   const minLag = Math.max(1, Math.round(MIN_PERIOD * fs));
@@ -334,9 +360,22 @@ function analyzeGait(now) {
 
   if (!isWalking) {
     isWalking = true;
-    // Aşkarlanana qədər artıq atılmış addımlar
-    const walkedSec = energyOnsetAt != null ? (now - energyOnsetAt) / 1000 : 0;
-    stepPhase = Math.min(walkedSec / stepPeriod, 3);
+    // Aşkarlanana qədər artıq atılmış addımlar: yerişin başlanğıcından bəri tapılan zirvələr.
+    // İndi məlum olan periodla yenidən süzülür; ən güclü zirvənin yarısından zəif olanlar
+    // (yeriş başlamamışdan əvvəlki titrəmə) sayılmır. Bir addımın iki zirvəsindən güclüsü qalır.
+    const from = (energyOnsetAt ?? now) - RECENT_WINDOW / 2;
+    const cand = pendingPeaks.filter((p) => p.t >= from);
+    const strongest = Math.max(0, ...cand.map((p) => p.v));
+    const kept = [];
+    for (const p of cand) {
+      if (p.v < 0.5 * strongest) continue;
+      const prev = kept[kept.length - 1];
+      if (prev && p.t - prev.t < minStepGap()) { if (p.v > prev.v) kept[kept.length - 1] = p; continue; }
+      kept.push(p);
+    }
+    pendingPeaks = [];
+    if (kept.length) lastPeakAt = kept[kept.length - 1].t;
+    for (let i = 0; i < Math.min(kept.length, 4); i++) onStep();
   }
 }
 
